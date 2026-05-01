@@ -7,7 +7,20 @@
       "Bash(pip list *)",
       "Bash(pip install *)",
       "Bash(python -c ' *)",
-      "Bash(python generate_docx.py)"
+      "Bash(python generate_docx.py)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Bash(git clone *)",
+      "Bash(python3 -c ' *)",
+      "WebFetch(domain:api.openalex.org)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(ls -la *.py)",
+      "Bash(ls -la figures/assets/)",
+      "Bash(ls -la tmp/)",
+      "Bash(find . -name \"*.py\" -not -path './.claude/*')",
+      "Bash(find . -name \"*.pptx\" -not -path './.claude/*')"
     ]
   }
 }
