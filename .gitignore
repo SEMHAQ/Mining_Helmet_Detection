@@ -13,8 +13,8 @@ train/
 reference/
 
 # Generated files
-论文全文.docx
-论文全文.pdf
+paper/*.docx
+paper/*.pdf
 
 # Python
 __pycache__/

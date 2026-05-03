@@ -1,4 +1,9 @@
-"""将论文全文.md转换为DOCX格式，严格遵循《矿业研究与开发》投稿模板"""
+"""将论文全文.md转换为DOCX格式，严格遵循《矿业研究与开发》投稿模板
+
+模板顺序：中文标题→作者→单位→中文摘要→关键词→中图分类号
+         →英文标题→作者拼音→英译单位→英文摘要→英文关键词
+         →正文→参考文献
+"""
 
 import re
 import os
@@ -9,8 +14,9 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 
 
+# ── 字体/段落辅助 ──────────────────────────────────────────────
+
 def set_run_font(run, cn_font='宋体', en_font='Times New Roman', size=Pt(10.5)):
-    """设置run的中英文字体"""
     run.font.name = en_font
     run.font.size = size
     r = run._element
@@ -25,8 +31,8 @@ def set_run_font(run, cn_font='宋体', en_font='Times New Roman', size=Pt(10.5)
     rFonts.set(qn('w:eastAsia'), cn_font)
 
 
-def set_paragraph_format(p, line_spacing=1.5, first_indent=None, space_before=Pt(0), space_after=Pt(0)):
-    """设置段落格式"""
+def set_para_fmt(p, line_spacing=1.5, first_indent=None,
+                 space_before=Pt(0), space_after=Pt(0)):
     pf = p.paragraph_format
     pf.line_spacing = line_spacing
     pf.space_before = space_before
@@ -35,78 +41,62 @@ def set_paragraph_format(p, line_spacing=1.5, first_indent=None, space_before=Pt
         pf.first_line_indent = first_indent
 
 
+# ── 文档元素 ───────────────────────────────────────────────────
+
 def add_title(doc, text):
-    """添加论文标题：黑体，小二号(18pt)，居中"""
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run(text)
-    set_run_font(run, cn_font='黑体', en_font='Times New Roman', size=Pt(18))
-    set_paragraph_format(p, line_spacing=1.5, space_after=Pt(6))
-    return p
+    set_run_font(run, cn_font='黑体', size=Pt(18))
+    set_para_fmt(p, space_after=Pt(6))
 
 
-def add_author_info(doc, text):
-    """添加作者信息：宋体，五号"""
+def add_center_text(doc, text, cn_font='宋体', size=Pt(10.5)):
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run(text)
-    set_run_font(run, size=Pt(10.5))
-    set_paragraph_format(p, line_spacing=1.5)
-    return p
+    set_run_font(run, cn_font=cn_font, size=size)
+    set_para_fmt(p)
 
 
-def add_abstract_label(doc, label='摘要'):
-    """添加摘要标签"""
+def add_label(doc, text, cn_font='黑体', size=Pt(10.5)):
     p = doc.add_paragraph()
-    run = p.add_run(label)
-    set_run_font(run, cn_font='黑体', en_font='Times New Roman', size=Pt(10.5))
+    run = p.add_run(text)
+    set_run_font(run, cn_font=cn_font, size=size)
     run.bold = True
-    set_paragraph_format(p, line_spacing=1.5)
+    set_para_fmt(p)
     return p
 
 
-def add_abstract_text(doc, text):
-    """添加摘要正文：楷体，小五号(9pt)"""
+def add_abstract_text(doc, text, cn_font='楷体', size=Pt(9)):
     p = doc.add_paragraph()
     run = p.add_run(text)
-    set_run_font(run, cn_font='楷体', en_font='Times New Roman', size=Pt(9))
-    set_paragraph_format(p, line_spacing=1.5)
-    return p
+    set_run_font(run, cn_font=cn_font, size=size)
+    set_para_fmt(p)
 
 
 def add_keywords(doc, label, text):
-    """添加关键词"""
     p = doc.add_paragraph()
-    run_label = p.add_run(label)
-    set_run_font(run_label, cn_font='黑体', en_font='Times New Roman', size=Pt(10.5))
-    run_label.bold = True
-    run_text = p.add_run(text)
-    set_run_font(run_text, size=Pt(10.5))
-    set_paragraph_format(p, line_spacing=1.5)
-    return p
+    r1 = p.add_run(label)
+    set_run_font(r1, cn_font='黑体', size=Pt(10.5))
+    r1.bold = True
+    r2 = p.add_run(text)
+    set_run_font(r2, size=Pt(10.5))
+    set_para_fmt(p)
 
 
-def add_heading_custom(doc, text, level):
-    """添加章节标题
-    level 1: 黑体，四号(14pt)，如 '0 引言', '1 相关工作'
-    level 2: 黑体，小四号(12pt)，如 '1.1 井下目标检测研究进展'
-    level 3: 黑体，五号(10.5pt)，如 '2.1 YOLOv11n基础架构'
-    """
+def add_heading(doc, text, level):
     size_map = {1: Pt(14), 2: Pt(12), 3: Pt(10.5)}
     p = doc.add_paragraph()
     run = p.add_run(text)
-    set_run_font(run, cn_font='黑体', en_font='Times New Roman', size=size_map.get(level, Pt(12)))
+    set_run_font(run, cn_font='黑体', size=size_map.get(level, Pt(12)))
     run.bold = True
-    space_before = Pt(12) if level == 1 else Pt(6)
-    set_paragraph_format(p, line_spacing=1.5, space_before=space_before, space_after=Pt(6))
-    return p
+    sb = Pt(12) if level == 1 else Pt(6)
+    set_para_fmt(p, space_before=sb, space_after=Pt(6))
 
 
-def add_body_paragraph(doc, text):
-    """添加正文段落：宋体，五号(10.5pt)，首行缩进2字符，1.5倍行距"""
+def add_body(doc, text):
     p = doc.add_paragraph()
-
-    # 处理加粗标记
     parts = re.split(r'\*\*(.*?)\*\*', text)
     for i, part in enumerate(parts):
         if not part:
@@ -115,329 +105,337 @@ def add_body_paragraph(doc, text):
         set_run_font(run, size=Pt(10.5))
         if i % 2 == 1:
             run.bold = True
-
-    set_paragraph_format(p, line_spacing=1.5, first_indent=Cm(0.74))
-    return p
+    set_para_fmt(p, first_indent=Cm(0.74))
 
 
-def add_table_caption(doc, cn_text, en_text):
-    """添加表格标题：中英双语，居中，黑体，小五号"""
+def add_formula_ph(doc, tag):
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run(cn_text)
-    set_run_font(run, cn_font='黑体', en_font='Times New Roman', size=Pt(9))
-    run.bold = True
-    set_paragraph_format(p, line_spacing=1.5, space_before=Pt(6), space_after=Pt(3))
-
-    p2 = doc.add_paragraph()
-    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run2 = p2.add_run(en_text)
-    set_run_font(run2, en_font='Times New Roman', size=Pt(9))
-    run2.bold = True
-    set_paragraph_format(p2, line_spacing=1.5, space_after=Pt(3))
-    return p2
+    run = p.add_run(f'（公式 {tag}）')
+    set_run_font(run, size=Pt(10.5))
+    run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+    set_para_fmt(p, space_before=Pt(6), space_after=Pt(6))
 
 
-def add_figure_caption(doc, cn_text, en_text):
-    """添加图片标题：中英双语，居中，宋体，小五号"""
+def add_image_ph(doc, caption):
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run(cn_text)
-    set_run_font(run, cn_font='宋体', en_font='Times New Roman', size=Pt(9))
-    run.bold = True
-    set_paragraph_format(p, line_spacing=1.5, space_after=Pt(3))
-
-    p2 = doc.add_paragraph()
-    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run2 = p2.add_run(en_text)
-    set_run_font(run2, en_font='Times New Roman', size=Pt(9))
-    run2.bold = True
-    set_paragraph_format(p2, line_spacing=1.5, space_after=Pt(6))
-    return p2
+    run = p.add_run(f'[{caption}]')
+    set_run_font(run, size=Pt(10.5))
+    run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+    set_para_fmt(p, space_before=Pt(6), space_after=Pt(6))
 
 
-def add_image(doc, img_path, width=Cm(12)):
-    """插入图片"""
-    if os.path.exists(img_path):
-        try:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run()
-            run.add_picture(img_path, width=width)
-            return p
-        except Exception:
-            pass
-    return None
+def add_table_caption(doc, cn, en):
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run(cn)
+    set_run_font(r, cn_font='黑体', size=Pt(9))
+    r.bold = True
+    set_para_fmt(p, space_before=Pt(6), space_after=Pt(3))
+    if en:
+        p2 = doc.add_paragraph()
+        p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r2 = p2.add_run(en)
+        set_run_font(r2, size=Pt(9))
+        r2.bold = True
+        set_para_fmt(p2, space_after=Pt(3))
+
+
+def add_fig_caption(doc, cn, en):
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run(cn)
+    set_run_font(r, size=Pt(9))
+    r.bold = True
+    set_para_fmt(p, space_after=Pt(3))
+    if en:
+        p2 = doc.add_paragraph()
+        p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r2 = p2.add_run(en)
+        set_run_font(r2, size=Pt(9))
+        r2.bold = True
+        set_para_fmt(p2, space_after=Pt(6))
 
 
 def add_three_line_table(doc, headers, rows):
-    """添加三线表"""
     table = doc.add_table(rows=len(rows) + 1, cols=len(headers))
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    # 设置表格样式为三线表
-    tbl = table._tbl
-    tblPr = tbl.find(qn('w:tblPr'))
-    if tblPr is None:
-        tblPr = tbl.makeelement(qn('w:tblPr'), {})
-        tbl.insert(0, tblPr)
-
-    # 表头行
-    for i, header in enumerate(headers):
+    for i, h in enumerate(headers):
         cell = table.rows[0].cells[i]
         cell.text = ''
         p = cell.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(header.strip())
+        run = p.add_run(h.strip())
         set_run_font(run, size=Pt(9))
         run.bold = True
-
-    # 数据行
-    for row_idx, row in enumerate(rows):
-        for col_idx, cell_text in enumerate(row):
-            cell = table.rows[row_idx + 1].cells[col_idx]
+    for ri, row in enumerate(rows):
+        for ci, val in enumerate(row):
+            cell = table.rows[ri + 1].cells[ci]
             cell.text = ''
             p = cell.paragraphs[0]
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(cell_text.strip())
+            run = p.add_run(val.strip())
             set_run_font(run, size=Pt(9))
-
-    # 设置三线表边框（仅顶线、表头底线、表格底线）
-    set_three_line_borders(table)
-
-    return table
+    _set_three_line_borders(table)
 
 
-def set_three_line_borders(table):
-    """设置三线表样式"""
+def _set_three_line_borders(table):
     tbl = table._tbl
     tblPr = tbl.find(qn('w:tblPr'))
     if tblPr is None:
         tblPr = tbl.makeelement(qn('w:tblPr'), {})
         tbl.insert(0, tblPr)
-
-    # 移除默认边框
-    for borders in tblPr.findall(qn('w:tblBorders')):
-        tblPr.remove(borders)
-
-    # 添加三线表边框
-    borders_elem = tblPr.makeelement(qn('w:tblBorders'), {})
-
+    for b in tblPr.findall(qn('w:tblBorders')):
+        tblPr.remove(b)
+    borders = tblPr.makeelement(qn('w:tblBorders'), {})
     for edge in ['top', 'bottom']:
-        elem = borders_elem.makeelement(qn(f'w:{edge}'), {
-            qn('w:val'): 'single',
-            qn('w:sz'): '12',  # 粗线
-            qn('w:space'): '0',
-            qn('w:color'): '000000',
-        })
-        borders_elem.append(elem)
-
-    # 表头底线（中等粗细）
-    insideH = borders_elem.makeelement(qn('w:insideH'), {
-        qn('w:val'): 'single',
-        qn('w:sz'): '6',
-        qn('w:space'): '0',
-        qn('w:color'): '000000',
-    })
-    borders_elem.append(insideH)
-
-    # 去掉竖线
+        el = borders.makeelement(qn(f'w:{edge}'), {
+            qn('w:val'): 'single', qn('w:sz'): '12',
+            qn('w:space'): '0', qn('w:color'): '000000'})
+        borders.append(el)
+    insideH = borders.makeelement(qn('w:insideH'), {
+        qn('w:val'): 'single', qn('w:sz'): '6',
+        qn('w:space'): '0', qn('w:color'): '000000'})
+    borders.append(insideH)
     for edge in ['left', 'right', 'insideV']:
-        elem = borders_elem.makeelement(qn(f'w:{edge}'), {
-            qn('w:val'): 'none',
-            qn('w:sz'): '0',
-            qn('w:space'): '0',
-            qn('w:color'): 'auto',
-        })
-        borders_elem.append(elem)
-
-    tblPr.append(borders_elem)
-
-    # 仅对第一行设置下边框
+        el = borders.makeelement(qn(f'w:{edge}'), {
+            qn('w:val'): 'none', qn('w:sz'): '0',
+            qn('w:space'): '0', qn('w:color'): 'auto'})
+        borders.append(el)
+    tblPr.append(borders)
     if len(table.rows) > 0:
-        row = table.rows[0]
-        for cell in row.cells:
+        for cell in table.rows[0].cells:
             tc = cell._tc
             tcPr = tc.find(qn('w:tcPr'))
             if tcPr is None:
                 tcPr = tc.makeelement(qn('w:tcPr'), {})
                 tc.insert(0, tcPr)
-            tcBorders = tcPr.makeelement(qn('w:tcBorders'), {})
-            bottom = tcBorders.makeelement(qn('w:bottom'), {
-                qn('w:val'): 'single',
-                qn('w:sz'): '6',
-                qn('w:space'): '0',
-                qn('w:color'): '000000',
-            })
-            tcBorders.append(bottom)
-            tcPr.append(tcBorders)
+            tcB = tcPr.makeelement(qn('w:tcBorders'), {})
+            bot = tcB.makeelement(qn('w:bottom'), {
+                qn('w:val'): 'single', qn('w:sz'): '6',
+                qn('w:space'): '0', qn('w:color'): '000000'})
+            tcB.append(bot)
+            tcPr.append(tcB)
 
 
-def add_reference(doc, text):
-    """添加参考文献：宋体，小五号(9pt)，无首行缩进"""
+def add_ref(doc, text):
     p = doc.add_paragraph()
     run = p.add_run(text)
     set_run_font(run, size=Pt(9))
-    set_paragraph_format(p, line_spacing=1.5, first_indent=Cm(0), space_before=Pt(0), space_after=Pt(6))
-    return p
-
-
-def add_formula(doc, formula_text, tag=''):
-    """添加公式：居中，Cambria Math"""
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    text = f'{formula_text}  {tag}' if tag else formula_text
-    run = p.add_run(text)
-    run.font.name = 'Cambria Math'
-    run.font.size = Pt(10)
-    run.italic = True
-    set_paragraph_format(p, line_spacing=1.5, space_before=Pt(6), space_after=Pt(6))
-    return p
+    set_para_fmt(p, space_after=Pt(3))
 
 
 def add_footnote(doc, text):
-    """添加注释行：宋体，小五号"""
     p = doc.add_paragraph()
     run = p.add_run(text)
     set_run_font(run, size=Pt(9))
-    set_paragraph_format(p, line_spacing=1.5, first_indent=Cm(0.74))
-    return p
+    set_para_fmt(p, first_indent=Cm(0))
 
 
-def convert_md_to_docx(md_path, docx_path):
-    """主转换函数"""
+# ── 主转换 ─────────────────────────────────────────────────────
+
+def generate_docx(md_path, docx_path):
     with open(md_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
     doc = Document()
-
-    # 设置默认样式
     style = doc.styles['Normal']
-    font = style.font
-    font.name = 'Times New Roman'
-    font.size = Pt(10.5)
+    style.font.name = 'Times New Roman'
+    style.font.size = Pt(10.5)
     style.element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
     style.paragraph_format.line_spacing = 1.5
+    for sec in doc.sections:
+        sec.top_margin = Cm(2.54)
+        sec.bottom_margin = Cm(2.54)
+        sec.left_margin = Cm(3.17)
+        sec.right_margin = Cm(3.17)
 
-    # 设置页边距
-    for section in doc.sections:
-        section.top_margin = Cm(2.54)
-        section.bottom_margin = Cm(2.54)
-        section.left_margin = Cm(3.17)
-        section.right_margin = Cm(3.17)
+    # 按 h2 标题分块
+    blocks = _split_by_h2(content)
 
-    lines = content.split('\n')
+    # ── 1. 中文标题 ──
+    add_title(doc, '基于ECB-YOLO的井下安全头盔检测模型')
+
+    # ── 2. 作者 ──
+    add_center_text(doc, '彭东海¹，余焕杰²，江华晋²')
+
+    # ── 3. 单位 ──
+    add_center_text(doc, '¹ 韶关学院 信息工程学院，广东 韶关 512005，中国', size=Pt(9))
+    add_center_text(doc, '² 湖南工商大学 计算机学院，湖南 长沙 410205，中国', size=Pt(9))
+
+    # ── 4-6. 中文摘要区块 ──
+    abs_block = blocks.get('摘要', '')
+    _render_abstract_block(doc, abs_block)
+
+    # ── 7. 英文标题 ──
+    en_title = 'Underground Safety Helmet Detection Model Based on ECB-YOLO'
+    add_title(doc, en_title)
+
+    # ── 8. 英文作者 ──
+    add_center_text(doc, 'PENG Donghai¹, YU Huanjie², JIANG Huajin²')
+    add_center_text(doc,
+        '¹ School of Information Engineering, Shaoguan University, '
+        'Shaoguan, Guangdong 512005, China', size=Pt(9))
+    add_center_text(doc,
+        '² School of Computer Science, Hunan University of Technology and Business, '
+        'Changsha, Hunan 410205, China', size=Pt(9))
+
+    # ── 9-10. 英文摘要 ──
+    en_block = blocks.get('Underground Safety Helmet Detection Model Based on ECB-YOLO', '')
+    _render_en_abstract(doc, en_block)
+
+    # ── 正文 ──
+    body_keys = [k for k in blocks if re.match(r'^\d+\s', k)]
+    for key in body_keys:
+        add_heading(doc, key, level=1)
+        _render_body_block(doc, blocks[key])
+
+    # ── 参考文献 ──
+    ref_block = blocks.get('参考文献（References）', blocks.get('参考文献', ''))
+    if ref_block:
+        add_heading(doc, '参考文献', level=1)
+        _render_refs(doc, ref_block)
+
+    doc.save(docx_path)
+    print(f'DOCX 已生成: {docx_path}')
+
+
+def _split_by_h2(content):
+    """按 ## 标题分块，返回 {标题: 内容}"""
+    parts = re.split(r'^## (.+)$', content, flags=re.MULTILINE)
+    blocks = {}
+    # parts[0] = 标题之前的头部（含 # 主标题、作者等）
+    # parts[1] = 第一个h2标题, parts[2] = 内容, ...
+    i = 1
+    while i < len(parts) - 1:
+        title = parts[i].strip()
+        body = parts[i + 1] if i + 1 < len(parts) else ''
+        blocks[title] = body.strip()
+        i += 2
+    return blocks
+
+
+def _strip_bold(text):
+    """去掉 **...** 标记"""
+    return re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+
+
+def _render_abstract_block(doc, block):
+    """渲染中文摘要区块（摘要正文 + 关键词 + 中图分类号 + 脚注）"""
+    lines = [l.strip() for l in block.split('\n') if l.strip()]
+    abstract_done = False
+    for line in lines:
+        if line == '---':
+            continue
+        # 摘要正文（第一个非空、非标签行）
+        if not abstract_done and not line.startswith('**') and not line.startswith('收稿'):
+            add_label(doc, '摘要')
+            add_abstract_text(doc, line)
+            abstract_done = True
+            continue
+        # 关键词
+        if '关键词' in line and '**' in line:
+            m = re.search(r'：\s*(.*)', _strip_bold(line))
+            if m:
+                add_keywords(doc, '关键词：', m.group(1).strip())
+            continue
+        # 中图分类号
+        if '中图分类号' in line:
+            add_body(doc, _strip_bold(line))
+            continue
+        # 脚注行
+        if any(line.startswith(k) for k in ('收稿日期', '基金项目', '作者简介', '通信作者')):
+            add_footnote(doc, line)
+            continue
+        # 其他加粗行
+        if line.startswith('**'):
+            add_footnote(doc, _strip_bold(line))
+
+
+def _render_en_abstract(doc, block):
+    """渲染英文摘要区块"""
+    lines = [l.strip() for l in block.split('\n') if l.strip()]
+    abstract_printed = False
+    for line in lines:
+        if line == '---':
+            continue
+        if line.startswith('**Keywords'):
+            m = re.search(r'Keywords[：:]\s*(.*)', _strip_bold(line))
+            if m:
+                add_keywords(doc, 'Keywords: ', m.group(1).strip())
+            continue
+        # 跳过机构行（短行且含 China）
+        if 'China' in line and len(line) < 120:
+            continue
+        # 跳过作者行（含逗号分隔的人名且较短）
+        if line.startswith('PENG ') or line.startswith('YU ') or line.startswith('JIANG '):
+            continue
+        # 摘要正文（长段落）
+        if not abstract_printed and len(line) > 100:
+            add_label(doc, 'Abstract', cn_font='Times New Roman')
+            add_abstract_text(doc, line, cn_font='Times New Roman')
+            abstract_printed = True
+
+
+def _render_body_block(doc, block):
+    """渲染一个正文章节的内容"""
+    lines = block.split('\n')
     i = 0
-    in_table = False
-    table_headers = []
-    table_rows = []
-    project_root = os.path.dirname(md_path)
-
     while i < len(lines):
         line = lines[i].strip()
-
-        # 跳过空行
-        if not line:
+        if not line or line == '---':
             i += 1
             continue
 
-        # 跳过分隔线
-        if line == '---':
-            i += 1
-            continue
-
-        # 主标题
-        if line.startswith('# ') and not line.startswith('## '):
-            text = line[2:].strip()
-            add_title(doc, text)
-            i += 1
-            continue
-
-        # 二级标题（章节标题 level 1）
-        if line.startswith('## ') and not line.startswith('### '):
-            text = line[3:].strip()
-            # 跳过 "参考文献（References）" 这样的标题，稍后处理
-            if '参考文献' in text:
-                add_heading_custom(doc, '参考文献', level=1)
-            elif text == 'Abstract':
-                add_heading_custom(doc, 'Abstract', level=1)
-            else:
-                add_heading_custom(doc, text, level=1)
-            i += 1
-            continue
-
-        # 三级标题（节标题 level 2）
+        # 三级标题
         if line.startswith('### ') and not line.startswith('#### '):
-            text = line[4:].strip()
-            add_heading_custom(doc, text, level=2)
+            add_heading(doc, line[4:].strip(), level=2)
             i += 1
             continue
 
-        # 四级标题（小节标题 level 3）
+        # 四级标题
         if line.startswith('#### '):
-            text = line[5:].strip()
-            add_heading_custom(doc, text, level=3)
+            add_heading(doc, line[5:].strip(), level=3)
             i += 1
             continue
 
-        # 图片
+        # 图片 → 占位符
         if line.startswith('!['):
-            match = re.match(r'!\[(.*?)\]\((.*?)\)', line)
-            if match:
-                alt_text = match.group(1)
-                img_path = os.path.join(project_root, match.group(2))
-                add_image(doc, img_path)
+            m = re.match(r'!\[(.*?)\]\((.*?)\)', line)
+            if m:
+                add_image_ph(doc, m.group(1))
             i += 1
             continue
 
-        # 图片标题（中英双语）
+        # 图片标题
         if line.startswith('**图') and line.endswith('**'):
-            cn_text = line.strip('*').strip()
-            # 下一行可能是英文标题
-            en_text = ''
+            cn = _strip_bold(line)
+            en = ''
             if i + 1 < len(lines) and lines[i + 1].strip().startswith('**Fig.'):
                 i += 1
-                en_text = lines[i].strip().strip('*').strip()
-            add_figure_caption(doc, cn_text, en_text)
+                en = _strip_bold(lines[i].strip())
+            add_fig_caption(doc, cn, en)
             i += 1
             continue
 
-        # 单独的Fig.标题行（如果没被上面捕获）
-        if line.startswith('**Fig.') and line.endswith('**'):
-            text = line.strip('*').strip()
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(text)
-            set_run_font(run, en_font='Times New Roman', size=Pt(9))
-            run.bold = True
-            set_paragraph_format(p, line_spacing=1.5, space_after=Pt(6))
-            i += 1
-            continue
-
-        # 表格标题（中英双语）
+        # 表格标题
         if line.startswith('**表') and line.endswith('**'):
-            cn_text = line.strip('*').strip()
-            en_text = ''
+            cn = _strip_bold(line)
+            en = ''
             if i + 1 < len(lines) and lines[i + 1].strip().startswith('**Table'):
                 i += 1
-                en_text = lines[i].strip().strip('*').strip()
-            add_table_caption(doc, cn_text, en_text)
+                en = _strip_bold(lines[i].strip())
+            add_table_caption(doc, cn, en)
             i += 1
             continue
 
-        # 单独的Table标题行
-        if line.startswith('**Table') and line.endswith('**'):
-            text = line.strip('*').strip()
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(text)
-            set_run_font(run, en_font='Times New Roman', size=Pt(9))
-            run.bold = True
-            set_paragraph_format(p, line_spacing=1.5, space_after=Pt(3))
+        # 跳过单独的 Fig./Table 行
+        if line.startswith('**Fig.') or line.startswith('**Table'):
             i += 1
             continue
 
-        # LaTeX行间公式
+        # LaTeX 公式 → 占位符
         if line.startswith('$$'):
             formula_lines = [line[2:]]
             i += 1
@@ -447,80 +445,90 @@ def convert_md_to_docx(md_path, docx_path):
             if i < len(lines):
                 formula_lines.append(lines[i].strip()[:-2])
             formula_text = ' '.join(formula_lines).strip()
-            tag_match = re.search(r'\\tag\{(\d+)\}', formula_text)
-            tag = f'({tag_match.group(1)})' if tag_match else ''
-            formula_clean = re.sub(r'\\tag\{\d+\}', '', formula_text).strip()
-            add_formula(doc, formula_clean, tag)
+            tag_m = re.search(r'\\tag\{(\d+)\}', formula_text)
+            tag = tag_m.group(1) if tag_m else '?'
+            add_formula_ph(doc, tag)
             i += 1
             continue
 
         # 表格
         if '|' in line and not line.startswith('**'):
-            cells = [c.strip() for c in line.split('|') if c.strip()]
-            # 跳过分隔行
-            if cells and all(c.replace('-', '').replace(':', '').strip() == '' for c in cells):
+            table_lines = [line]
+            i += 1
+            while i < len(lines) and '|' in lines[i] and not lines[i].strip().startswith('**'):
+                table_lines.append(lines[i].strip())
                 i += 1
-                continue
-            if not in_table:
-                in_table = True
-                table_headers = cells
-            else:
-                table_rows.append(cells)
-            # 检查下一行是否还是表格
-            if i + 1 < len(lines) and '|' in lines[i + 1] and not lines[i + 1].strip().startswith('**'):
-                i += 1
-                continue
-            else:
-                if table_headers and table_rows:
-                    add_three_line_table(doc, table_headers, table_rows)
-                in_table = False
-                table_headers = []
-                table_rows = []
-                i += 1
-                continue
+            headers = []
+            rows = []
+            for tl in table_lines:
+                cells = [c.strip() for c in tl.split('|') if c.strip()]
+                if all(c.replace('-', '').replace(':', '').strip() == '' for c in cells):
+                    continue
+                if not headers:
+                    headers = cells
+                else:
+                    rows.append(cells)
+            if headers and rows:
+                add_three_line_table(doc, headers, rows)
+            continue
 
         # 注释行
-        if line.startswith('注') and (line.startswith('注：') or line.startswith('注¹') or line.startswith('注²')):
+        if line.startswith('注：') or line.startswith('注¹') or line.startswith('注²'):
             add_footnote(doc, line)
             i += 1
             continue
 
-        # 参考文献
-        if re.match(r'^\[\d+\]', line):
-            add_reference(doc, line)
+        # 加粗独立行
+        if line.startswith('**') and '**' in line[2:]:
+            add_body(doc, _strip_bold(line))
             i += 1
             continue
 
-        # 普通正文段落
-        # 收集连续非空、非特殊格式行作为一个段落
+        # 普通正文（合并连续行）
         para_lines = [line]
-        while i + 1 < len(lines):
-            next_line = lines[i + 1].strip()
-            if not next_line:
-                break
-            if next_line.startswith('#') or next_line.startswith('![') or next_line.startswith('$$'):
-                break
-            if next_line.startswith('|') and not next_line.startswith('**'):
-                break
-            if next_line.startswith('**表') or next_line.startswith('**图') or next_line.startswith('**Fig') or next_line.startswith('**Table'):
-                break
-            if re.match(r'^\[\d+\]', next_line):
-                break
-            if next_line == '---':
-                break
-            i += 1
-            para_lines.append(next_line)
-
-        full_text = ' '.join(para_lines)
-        add_body_paragraph(doc, full_text)
         i += 1
+        while i < len(lines):
+            ns = lines[i].strip()
+            if not ns:
+                break
+            if (ns.startswith('#') or ns.startswith('![') or ns.startswith('$$')
+                    or ns == '---'):
+                break
+            if '|' in ns and not ns.startswith('**'):
+                break
+            if ns.startswith('**') and ('图' in ns or '表' in ns or 'Fig' in ns or 'Table' in ns):
+                break
+            if re.match(r'^\[\d+\]', ns):
+                break
+            para_lines.append(ns)
+            i += 1
+        add_body(doc, ' '.join(para_lines))
 
-    doc.save(docx_path)
-    print(f"DOCX已生成: {docx_path}")
+
+def _render_refs(doc, block):
+    """渲染参考文献（含中文文献的英文翻译）"""
+    lines = [l.strip() for l in block.split('\n') if l.strip()]
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line == '---':
+            i += 1
+            continue
+        # 参考文献条目
+        if re.match(r'^\[\d+\]', line):
+            add_ref(doc, line)
+            # 检查下一行是否是英文翻译
+            if i + 1 < len(lines):
+                nxt = lines[i + 1]
+                if (nxt and not nxt.startswith('[') and not nxt.startswith('#')
+                        and re.match(r'^[A-Z]', nxt)):
+                    i += 1
+                    add_ref(doc, lines[i])
+        i += 1
 
 
 if __name__ == '__main__':
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    md_path = os.path.join(project_root, '论文全文.md')
-    docx_path = os.path.join(project_root, '论文全文.docx')
-    convert_md_to_docx(md_path, docx_path)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    md = os.path.join(root, '论文全文.md')
+    out = os.path.join(root, '论文全文.docx')
+    generate_docx(md, out)
