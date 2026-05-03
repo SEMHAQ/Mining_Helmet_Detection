@@ -7,6 +7,7 @@ tmp/
 paper_test_pic/
 papers_from_journal/
 train/
+reference/
 
 # Generated files
 论文全文.docx
