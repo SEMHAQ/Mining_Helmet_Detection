@@ -2,6 +2,9 @@
 .claude/skills/
 .claude/settings.local.json
 
+# Obsidian files
+.obsidian/
+
 # Temp files
 tmp/
 paper_test_pic/
@@ -11,6 +14,7 @@ reference/
 
 # Generated files
 论文全文.docx
+论文全文.pdf
 
 # Python
 __pycache__/
