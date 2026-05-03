@@ -278,7 +278,7 @@ def add_reference(doc, text):
     p = doc.add_paragraph()
     run = p.add_run(text)
     set_run_font(run, size=Pt(9))
-    set_paragraph_format(p, line_spacing=1.5, first_indent=Cm(0), space_after=Pt(3))
+    set_paragraph_format(p, line_spacing=1.5, first_indent=Cm(0), space_before=Pt(0), space_after=Pt(6))
     return p
 
 
