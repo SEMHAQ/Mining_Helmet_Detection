@@ -1,8 +1,13 @@
 """将论文全文.md转换为DOCX格式，严格遵循《矿业研究与开发》投稿模板
 
-模板顺序：中文标题→作者→单位→中文摘要→关键词→中图分类号
-         →英文标题→作者拼音→英译单位→英文摘要→英文关键词
-         →正文→参考文献
+模板要求：
+- 一级标题：小四宋体加粗
+- 二级标题：5号宋体加粗
+- 正文：5号宋体，1.5倍行距，首行缩进2字符
+- 参考文献：6号宋体
+- 摘要：楷体小五
+- 图表标题中英双语
+- 颜色图需标注"颜色标识见电子版"
 """
 
 import re
@@ -44,6 +49,7 @@ def set_para_fmt(p, line_spacing=1.5, first_indent=None,
 # ── 文档元素 ───────────────────────────────────────────────────
 
 def add_title(doc, text):
+    """论文标题：黑体 小二(18pt) 居中"""
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run(text)
@@ -86,16 +92,28 @@ def add_keywords(doc, label, text):
 
 
 def add_heading(doc, text, level):
-    size_map = {1: Pt(14), 2: Pt(12), 3: Pt(10.5)}
+    """一级标题：小四(12pt)宋体加粗；二级标题：5号(10.5pt)宋体加粗"""
+    if level == 1:
+        size = Pt(12)   # 小四
+        cn_font = '宋体'
+        sb = Pt(12)
+    elif level == 2:
+        size = Pt(10.5)  # 五号
+        cn_font = '宋体'
+        sb = Pt(6)
+    else:
+        size = Pt(10.5)
+        cn_font = '宋体'
+        sb = Pt(3)
     p = doc.add_paragraph()
     run = p.add_run(text)
-    set_run_font(run, cn_font='黑体', size=size_map.get(level, Pt(12)))
+    set_run_font(run, cn_font=cn_font, size=size)
     run.bold = True
-    sb = Pt(12) if level == 1 else Pt(6)
     set_para_fmt(p, space_before=sb, space_after=Pt(6))
 
 
 def add_body(doc, text):
+    """正文：5号宋体(10.5pt)，首行缩进2字符"""
     p = doc.add_paragraph()
     parts = re.split(r'\*\*(.*?)\*\*', text)
     for i, part in enumerate(parts):
@@ -124,6 +142,16 @@ def add_image_ph(doc, caption):
     set_run_font(run, size=Pt(10.5))
     run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
     set_para_fmt(p, space_before=Pt(6), space_after=Pt(6))
+
+
+def add_color_note(doc):
+    """颜色标识说明"""
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = p.add_run('（颜色标识见电子版）')
+    set_run_font(run, size=Pt(9))
+    run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+    set_para_fmt(p, space_after=Pt(3))
 
 
 def add_table_caption(doc, cn, en):
@@ -220,10 +248,11 @@ def _set_three_line_borders(table):
 
 
 def add_ref(doc, text):
+    """参考文献：6号(7.5pt)"""
     p = doc.add_paragraph()
     run = p.add_run(text)
-    set_run_font(run, size=Pt(9))
-    set_para_fmt(p, space_after=Pt(3))
+    set_run_font(run, size=Pt(7.5))
+    set_para_fmt(p, space_after=Pt(2))
 
 
 def add_footnote(doc, text):
@@ -234,6 +263,11 @@ def add_footnote(doc, text):
 
 
 # ── 主转换 ─────────────────────────────────────────────────────
+
+# 需要标注"颜色标识见电子版"的图（有颜色区分的对比图）
+COLOR_FIGURES = {'图5', '图6', '图7', '图8', '图9', '图10',
+                 '图11', '图12', '图13', '图14'}
+
 
 def generate_docx(md_path, docx_path):
     with open(md_path, 'r', encoding='utf-8') as f:
@@ -251,7 +285,6 @@ def generate_docx(md_path, docx_path):
         sec.left_margin = Cm(3.17)
         sec.right_margin = Cm(3.17)
 
-    # 按 h2 标题分块
     blocks = _split_by_h2(content)
 
     # ── 1. 中文标题 ──
@@ -269,8 +302,7 @@ def generate_docx(md_path, docx_path):
     _render_abstract_block(doc, abs_block)
 
     # ── 7. 英文标题 ──
-    en_title = 'Underground Safety Helmet Detection Model Based on ECB-YOLO'
-    add_title(doc, en_title)
+    add_title(doc, 'Underground Safety Helmet Detection Model Based on ECB-YOLO')
 
     # ── 8. 英文作者 ──
     add_center_text(doc, 'PENG Donghai¹, YU Huanjie², JIANG Huajin²')
@@ -302,59 +334,48 @@ def generate_docx(md_path, docx_path):
 
 
 def _split_by_h2(content):
-    """按 ## 标题分块，返回 {标题: 内容}"""
     parts = re.split(r'^## (.+)$', content, flags=re.MULTILINE)
     blocks = {}
-    # parts[0] = 标题之前的头部（含 # 主标题、作者等）
-    # parts[1] = 第一个h2标题, parts[2] = 内容, ...
     i = 1
     while i < len(parts) - 1:
         title = parts[i].strip()
         body = parts[i + 1] if i + 1 < len(parts) else ''
-        blocks[title] = body.strip()
+        blocks[title] = body
         i += 2
     return blocks
 
 
 def _strip_bold(text):
-    """去掉 **...** 标记"""
     return re.sub(r'\*\*(.*?)\*\*', r'\1', text)
 
 
 def _render_abstract_block(doc, block):
-    """渲染中文摘要区块（摘要正文 + 关键词 + 中图分类号 + 脚注）"""
     lines = [l.strip() for l in block.split('\n') if l.strip()]
     abstract_done = False
     for line in lines:
         if line == '---':
             continue
-        # 摘要正文（第一个非空、非标签行）
         if not abstract_done and not line.startswith('**') and not line.startswith('收稿'):
             add_label(doc, '摘要')
             add_abstract_text(doc, line)
             abstract_done = True
             continue
-        # 关键词
         if '关键词' in line and '**' in line:
             m = re.search(r'：\s*(.*)', _strip_bold(line))
             if m:
                 add_keywords(doc, '关键词：', m.group(1).strip())
             continue
-        # 中图分类号
         if '中图分类号' in line:
             add_body(doc, _strip_bold(line))
             continue
-        # 脚注行
         if any(line.startswith(k) for k in ('收稿日期', '基金项目', '作者简介', '通信作者')):
             add_footnote(doc, line)
             continue
-        # 其他加粗行
         if line.startswith('**'):
             add_footnote(doc, _strip_bold(line))
 
 
 def _render_en_abstract(doc, block):
-    """渲染英文摘要区块"""
     lines = [l.strip() for l in block.split('\n') if l.strip()]
     abstract_printed = False
     for line in lines:
@@ -365,13 +386,10 @@ def _render_en_abstract(doc, block):
             if m:
                 add_keywords(doc, 'Keywords: ', m.group(1).strip())
             continue
-        # 跳过机构行（短行且含 China）
         if 'China' in line and len(line) < 120:
             continue
-        # 跳过作者行（含逗号分隔的人名且较短）
         if line.startswith('PENG ') or line.startswith('YU ') or line.startswith('JIANG '):
             continue
-        # 摘要正文（长段落）
         if not abstract_printed and len(line) > 100:
             add_label(doc, 'Abstract', cn_font='Times New Roman')
             add_abstract_text(doc, line, cn_font='Times New Roman')
@@ -379,7 +397,6 @@ def _render_en_abstract(doc, block):
 
 
 def _render_body_block(doc, block):
-    """渲染一个正文章节的内容"""
     lines = block.split('\n')
     i = 0
     while i < len(lines):
@@ -404,7 +421,13 @@ def _render_body_block(doc, block):
         if line.startswith('!['):
             m = re.match(r'!\[(.*?)\]\((.*?)\)', line)
             if m:
-                add_image_ph(doc, m.group(1))
+                caption = m.group(1)
+                add_image_ph(doc, caption)
+                # 对比图/PR曲线/训练曲线/混淆矩阵 → 标注颜色见电子版
+                for fig_id in COLOR_FIGURES:
+                    if fig_id in caption:
+                        add_color_note(doc)
+                        break
             i += 1
             continue
 
@@ -437,14 +460,20 @@ def _render_body_block(doc, block):
 
         # LaTeX 公式 → 占位符
         if line.startswith('$$'):
-            formula_lines = [line[2:]]
-            i += 1
-            while i < len(lines) and not lines[i].strip().endswith('$$'):
-                formula_lines.append(lines[i].strip())
+            first = line[2:]
+            if first.endswith('$$'):
+                # 单行公式：$$...\tag{N}$$
+                formula_text = first[:-2].strip()
+            else:
+                # 多行公式
+                formula_lines = [first]
                 i += 1
-            if i < len(lines):
-                formula_lines.append(lines[i].strip()[:-2])
-            formula_text = ' '.join(formula_lines).strip()
+                while i < len(lines) and not lines[i].strip().endswith('$$'):
+                    formula_lines.append(lines[i].strip())
+                    i += 1
+                if i < len(lines):
+                    formula_lines.append(lines[i].strip()[:-2])
+                formula_text = ' '.join(formula_lines).strip()
             tag_m = re.search(r'\\tag\{(\d+)\}', formula_text)
             tag = tag_m.group(1) if tag_m else '?'
             add_formula_ph(doc, tag)
@@ -484,15 +513,14 @@ def _render_body_block(doc, block):
             i += 1
             continue
 
-        # 普通正文（合并连续行）
+        # 普通正文（合并连续行，遇到空行/特殊标记停止）
         para_lines = [line]
         i += 1
         while i < len(lines):
             ns = lines[i].strip()
             if not ns:
                 break
-            if (ns.startswith('#') or ns.startswith('![') or ns.startswith('$$')
-                    or ns == '---'):
+            if ns.startswith('#') or ns.startswith('![') or ns.startswith('$$') or ns == '---':
                 break
             if '|' in ns and not ns.startswith('**'):
                 break
@@ -506,7 +534,6 @@ def _render_body_block(doc, block):
 
 
 def _render_refs(doc, block):
-    """渲染参考文献（含中文文献的英文翻译）"""
     lines = [l.strip() for l in block.split('\n') if l.strip()]
     i = 0
     while i < len(lines):
@@ -514,10 +541,8 @@ def _render_refs(doc, block):
         if line == '---':
             i += 1
             continue
-        # 参考文献条目
         if re.match(r'^\[\d+\]', line):
             add_ref(doc, line)
-            # 检查下一行是否是英文翻译
             if i + 1 < len(lines):
                 nxt = lines[i + 1]
                 if (nxt and not nxt.startswith('[') and not nxt.startswith('#')
@@ -530,5 +555,6 @@ def _render_refs(doc, block):
 if __name__ == '__main__':
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     md = os.path.join(root, '论文全文.md')
-    out = os.path.join(root, '论文全文.docx')
+    out = os.path.join(root, 'paper', '论文全文.docx')
+    os.makedirs(os.path.dirname(out), exist_ok=True)
     generate_docx(md, out)
